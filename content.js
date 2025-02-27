@@ -106,10 +106,6 @@ function addChatMessage(sender, text) {
         <textarea class="chat-input" placeholder="Ask a question about this problem..."></textarea>
         <button class="send-message-btn">Send</button>
       </div>
-      <div class="api-key-container">
-        <input type="password" class="gemini-api-key" placeholder="Enter your Gemini API key">
-        <button class="save-api-key-btn">Save Key</button>
-      </div>
     `;
     document.body.appendChild(chatContainer);
     console.log("Chat container added to body");
@@ -132,8 +128,6 @@ function addChatMessage(sender, text) {
       }
     });
   
-    document.querySelector(".save-api-key-btn").addEventListener("click", saveApiKey);
-  
     // Load API key if saved
     chrome.storage.local.get(["geminiApiKey"], function (result) {
       if (result.geminiApiKey) {
@@ -143,279 +137,366 @@ function addChatMessage(sender, text) {
     console.log("Button and chat interface successfully injected");
   }
   
-  // Extract problem data from the page
-  function extractProblemData() {
-    console.log("Extracting problem data");
-    let problemData = {
-      title: "",
-      statement: "",
-      hints: ""
-    };
-  
-    const titleElements = [
-      document.querySelector(".page-title-text h1"),
-      document.querySelector("h1"),
-      document.querySelector(".problem-title"),
-      document.querySelector(".card-title")
-    ];
-  
-    for (const elem of titleElements) {
-      if (elem) {
-        problemData.title = elem.textContent.trim();
-        console.log("Found title:", problemData.title);
-        break;
-      }
+  // Function to extract problem details
+  function extractProblemDetails() {
+    try {
+      // Extract problem title
+      const titleElement = document.querySelector('.problem_heading.fs-4');
+      
+      // Extract difficulty and other metadata
+      const metadataElements = document.querySelectorAll('.problem_paragraph.mb-0');
+      const difficultyElement = metadataElements[0];
+      const timeLimit = metadataElements[2];
+      const memoryLimit = metadataElements[4];
+      const score = metadataElements[6];
+
+      // Extract problem description
+      const descriptionElement = document.querySelector('.coding_desc__pltWY');
+      
+      // Extract input/output format and constraints
+      const inputFormatElement = document.querySelector('h5.problem_heading:contains("Input Format") + div');
+      const outputFormatElement = document.querySelector('h5.problem_heading:contains("Output Format") + div');
+      const constraintsElement = document.querySelector('h5.problem_heading:contains("Constraints") + div');
+      
+      // Extract sample test cases
+      const sampleInputs = Array.from(document.querySelectorAll('.coding_input_format__pv9fS'))
+        .filter((el, i) => i % 2 === 0)
+        .map(el => el.textContent.trim());
+      const sampleOutputs = Array.from(document.querySelectorAll('.coding_input_format__pv9fS'))
+        .filter((el, i) => i % 2 === 1)
+        .map(el => el.textContent.trim());
+
+      // Combine the samples
+      const samples = sampleInputs.map((input, i) => ({
+        input: input,
+        output: sampleOutputs[i]
+      }));
+
+      const problemDetails = {
+        title: titleElement?.textContent?.trim() || 'Unknown Problem',
+        difficulty: difficultyElement?.textContent?.trim() || 'Unknown',
+        timeLimit: timeLimit?.textContent?.trim() || 'N/A',
+        memoryLimit: memoryLimit?.textContent?.trim() || 'N/A',
+        score: score?.textContent?.trim() || 'N/A',
+        description: descriptionElement?.textContent?.trim() || '',
+        inputFormat: inputFormatElement?.textContent?.trim() || '',
+        outputFormat: outputFormatElement?.textContent?.trim() || '',
+        constraints: constraintsElement?.textContent?.trim() || '',
+        samples: samples,
+        programmingLanguage: detectProgrammingLanguage()
+      };
+
+      console.log('Extracted Problem Details:', problemDetails);
+      return problemDetails;
+
+    } catch (error) {
+      console.error('Error extracting problem details:', error);
+      return {
+        title: 'Unknown Problem',
+        difficulty: 'Unknown',
+        description: '',
+        samples: [],
+        programmingLanguage: detectProgrammingLanguage()
+      };
     }
-  
-    if (!problemData.title) {
-      const urlParts = window.location.pathname.split("/");
-      const lastPart = urlParts[urlParts.length - 1];
-      problemData.title = lastPart.replace(/-/g, " ");
-      console.log("Generated title from URL:", problemData.title);
-    }
-  
-    const statementElements = [
-      document.querySelector(".problem-statement"),
-      document.querySelector(".problem-description"),
-      document.querySelector(".problem-text"),
-      document.querySelector(".card.card-body"),
-      document.querySelector(".card p")
-    ];
-  
-    for (const elem of statementElements) {
-      if (elem) {
-        problemData.statement = elem.textContent.trim();
-        console.log("Found problem statement with length:", problemData.statement.length);
-        break;
-      }
-    }
-  
-    const hintsElements = [
-      document.querySelector(".problem-hints"),
-      document.querySelector(".hints"),
-      document.querySelector(".card small")
-    ];
-  
-    for (const elem of hintsElements) {
-      if (elem) {
-        problemData.hints = elem.textContent.trim();
-        console.log("Found hints with length:", problemData.hints.length);
-        break;
-      }
-    }
-  
-    if (!problemData.statement) {
-      const mainContent = document.querySelector("main") ||
-        document.querySelector(".main-content") ||
-        document.querySelector(".content") ||
-        document.querySelector(".card");
-      if (mainContent) {
-        problemData.statement = mainContent.textContent.trim();
-        console.log("Got fallback statement with length:", problemData.statement.length);
-      }
-    }
-  
-    chrome.storage.local.set({ problemData: problemData });
-  
-    const chatMessages = document.querySelector(".chat-messages");
-    chatMessages.innerHTML = `
-      <div class="ai-message">
-        <p>I've analyzed the following problem:</p>
-        <p><strong>Title:</strong> ${problemData.title || "Unknown problem"}</p>
-        <p>How can I help you with this problem?</p>
-      </div>
-    `;
   }
   
-  // Send message to Gemini API and manage interactivity
-  function sendMessage() {
-    const chatInput = document.querySelector(".chat-input");
-    const userMessage = chatInput.value.trim();
-    const chatMessages = document.querySelector(".chat-messages");
-  
-    if (!userMessage) return;
-  
-    // Check message relevance
-    if (!isRelevant(userMessage)) {
-      chatMessages.innerHTML += `
-        <div class="ai-message">
-          <p>I am not made for this.</p>
-        </div>
-      `;
-      chatInput.value = "";
-      return;
-    }
-  
-    // Store user message
-    addChatMessage("user", userMessage);
-  
-    // Add user message to chat
-    chatMessages.innerHTML += `
-      <div class="user-message">
-        <p>${userMessage}</p>
-      </div>
-    `;
-    chatInput.value = "";
-  
-    // Show loading indicator
-    chatMessages.innerHTML += `
-      <div class="ai-message loading" id="loading-message">
-        <p>Thinking...</p>
-      </div>
-    `;
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  
-    // Retrieve problem data and conversation history
-    chrome.storage.local.get(["problemData"], function (result) {
-      const problemData = result.problemData || { title: "", statement: "", hints: "" };
-      const historyText = getChatHistoryText();
-  
-      let prompt = "";
-      // If the user's message contains "solution" or "code", provide a complete solution.
-      if (userMessage.toLowerCase().includes("solution") || userMessage.toLowerCase().includes("code")) {
-        prompt = `
-  Conversation history:
-  ${historyText}
-  
-  I need help with the following DSA problem from MAANG.in:
-  
-  Title: ${problemData.title || "Unknown problem"}
-  
-  Problem Statement: ${problemData.statement || "No statement available"}
-  
-  ${problemData.hints ? "Hints: " + problemData.hints : ""}
-  
-  My question: ${userMessage}
-  
-  Please provide a complete solution that includes both a brute-force approach and an optimal approach, with detailed explanations and code examples.
-  `;
-      } else {
-        // Otherwise, behave interactively.
-        prompt = `
-  Conversation history:
-  ${historyText}
-  
-  I need help with the following DSA problem from MAANG.in:
-  
-  Title: ${problemData.title || "Unknown problem"}
-  
-  Problem Statement: ${problemData.statement || "No statement available"}
-  
-  ${problemData.hints ? "Hints: " + problemData.hints : ""}
-  
-  My question: ${userMessage}
-  
-  Please behave like ChatGPT—respond in an interactive and conversational manner.
-  Ask clarifying questions if needed, and do not provide a complete solution until explicitly requested.
-  `;
-      }
-  
-      // Call Gemini API with the constructed prompt
-      makeGeminiApiRequest(document.querySelector(".gemini-api-key").value.trim(), prompt)
-        .then((response) => {
-          const loadingMessage = document.getElementById("loading-message");
-          if (loadingMessage) {
-            loadingMessage.remove();
-          }
-          chatMessages.innerHTML += `
-            <div class="ai-message">
-              <p>${formatResponse(response)}</p>
-            </div>
-          `;
-          addChatMessage("ai", response);
-          chatMessages.scrollTop = chatMessages.scrollHeight;
-        })
-        .catch((error) => {
-          const loadingMessage = document.getElementById("loading-message");
-          if (loadingMessage) {
-            loadingMessage.remove();
-          }
-          chatMessages.innerHTML += `
-            <div class="ai-message error">
-              <p>Error: ${error.message || "Failed to get response from Gemini API"}</p>
-            </div>
-          `;
-          chatMessages.scrollTop = chatMessages.scrollHeight;
-        });
-    });
-  }
-  
-  // Format the AI response with markdown styling
-  function formatResponse(text) {
-    text = text.replace(/```(\\w*)([\\s\\S]*?)```/g, function (match, language, code) {
-      return `<pre><code class="${language}">${code}</code></pre>`;
-    });
-    text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
-    text = text.replace(/^### (.*$)/gm, "<h3>$1</h3>");
-    text = text.replace(/^## (.*$)/gm, "<h2>$1</h2>");
-    text = text.replace(/^# (.*$)/gm, "<h1>$1</h1>");
-    text = text.replace(/^\\* (.*$)/gm, "<li>$1</li>");
-    text = text.replace(/^- (.*$)/gm, "<li>$1</li>");
-    text = text.replace(/\\n\\n/g, "</p><p>");
-    return "<p>" + text + "</p>";
-  }
-  
-  // Make request to Gemini API
+  // Function to make request to Gemini API
   async function makeGeminiApiRequest(apiKey, prompt) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    
+    const problemDetails = await Promise.resolve(extractProblemDetails());
+    
+    if (!isRelevantMessage(prompt)) {
+      return "I'm designed to help with coding problems and technical questions. Let's focus on the problem at hand. How can I help you with your coding challenge?";
+    }
+
+    const programmingLanguage = detectProgrammingLanguage();
+    const chatHistory = formatChatHistoryForPrompt();
+    
+    let enhancedPrompt = `You are a friendly and helpful coding assistant on MAANG.in. 
+
+PROBLEM DETAILS:
+Title: ${problemDetails.title}
+Difficulty: ${problemDetails.difficulty}
+Time Limit: ${problemDetails.timeLimit}
+Memory Limit: ${problemDetails.memoryLimit}
+Score: ${problemDetails.score}
+
+Description:
+${problemDetails.description}
+
+Input Format:
+${problemDetails.inputFormat}
+
+Output Format:
+${problemDetails.outputFormat}
+
+Constraints:
+${problemDetails.constraints}
+
+Sample Test Cases:
+${problemDetails.samples.map((sample, i) => 
+  `Sample ${i + 1}:
+Input:
+${sample.input}
+Output:
+${sample.output}
+`).join('\n')}
+
+Programming Language: ${programmingLanguage}
+
+Previous Conversation:
+${chatHistory}
+
+User Question: ${prompt}
+
+Instructions:
+1. If you have the problem details above, provide specific help related to this problem
+2. If you don't have complete problem details, ask the user to share the problem they're working on
+3. Always provide responses in ${programmingLanguage} when showing code
+4. Be friendly and encouraging while maintaining focus on the coding problem
+5. If the user asks about previous discussion, use the chat history for context`;
+
     const data = {
-      contents: [
-        {
-          parts: [
-            {
-              text: prompt,
-            },
-          ],
-        },
-      ],
+      contents: [{
+        parts: [{
+          text: enhancedPrompt,
+        }],
+      }],
       generationConfig: {
         temperature: 0.7,
         topK: 40,
         topP: 0.95,
         maxOutputTokens: 8192,
       },
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        },
+        {
+          category: "HARM_CATEGORY_HATE_SPEECH",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        }
+      ]
     };
-  
+
     try {
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify(data),
       });
-  
+
       if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`API request failed: ${response.status} - ${errorText}`);
       }
-  
+
       const responseData = await response.json();
-  
-      if (
-        responseData.candidates &&
-        responseData.candidates[0] &&
-        responseData.candidates[0].content &&
-        responseData.candidates[0].content.parts &&
-        responseData.candidates[0].content.parts[0]
-      ) {
-        return responseData.candidates[0].content.parts[0].text;
-      } else {
-        throw new Error("Unexpected response format from Gemini API");
+      
+      if (!responseData.candidates?.[0]?.content?.parts?.[0]?.text) {
+        throw new Error("Invalid response format from Gemini API");
       }
+
+      return responseData.candidates[0].content.parts[0].text;
     } catch (error) {
-      console.error("Error calling Gemini API:", error);
-      throw error;
+      console.error("Gemini API error:", error);
+      throw new Error(`Failed to get response: ${error.message}`);
     }
   }
   
-  // Save API key to Chrome storage
-  function saveApiKey() {
-    const apiKey = document.querySelector(".gemini-api-key").value.trim();
-    if (apiKey) {
-      chrome.storage.local.set({ geminiApiKey: apiKey }, function () {
-        alert("API key saved successfully!");
-      });
+  // Function to extract problem context
+  function extractProblemContext() {
+    const title = document.querySelector('h1')?.textContent || '';
+    const problemStatement = document.querySelector('.problem-statement')?.textContent || '';
+    const codeExamples = Array.from(document.querySelectorAll('pre')).map(pre => pre.textContent).join('\n');
+    
+    return {
+      title,
+      problemStatement,
+      codeExamples
+    };
+  }
+  
+  // Function to maintain chat context
+  let chatContext = {
+    problemDetails: null,
+    messageHistory: [],
+    maxHistoryLength: 10
+  };
+  
+  // Add this function to generate a friendly greeting
+  function generateGreeting(problemDetails) {
+    const greetings = [
+      "Hello! 👋",
+      "Hi there! 👋",
+      "Welcome! ��",
+      "Greetings! 👋"
+    ];
+
+    const timeBasedGreetings = {
+      morning: "Good morning! ☀️",
+      afternoon: "Good afternoon! 🌤️",
+      evening: "Good evening! 🌙"
+    };
+
+    // Get current hour to determine appropriate greeting
+    const hour = new Date().getHours();
+    let timeGreeting;
+    if (hour >= 5 && hour < 12) {
+      timeGreeting = timeBasedGreetings.morning;
+    } else if (hour >= 12 && hour < 18) {
+      timeGreeting = timeBasedGreetings.afternoon;
     } else {
-      alert("Please enter a valid API key.");
+      timeGreeting = timeBasedGreetings.evening;
     }
+
+    // Randomly select a casual greeting
+    const casualGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    
+    // Construct the full greeting
+    let message = `${timeGreeting} ${casualGreeting} `;
+    
+    if (problemDetails.title && problemDetails.title !== 'Unknown Problem') {
+      message += `I see you're working on "${problemDetails.title}". `;
+      if (problemDetails.difficulty) {
+        message += `This is a ${problemDetails.difficulty.toLowerCase()} level problem. `;
+      }
+      message += "How can I help you solve it?";
+    } else {
+      message += "I'm your coding assistant. What problem would you like help with?";
+    }
+
+    return message;
+  }
+  
+  // Update the initializeChatContext function
+  async function initializeChatContext() {
+    try {
+      const details = await Promise.resolve(extractProblemDetails());
+      chatContext.problemDetails = details;
+      
+      const chatMessages = document.querySelector(".chat-messages");
+      if (chatMessages) {
+        chatMessages.innerHTML = '';
+        
+        // Add the greeting message
+        const greeting = generateGreeting(details);
+        addMessageToChat('ai', greeting);
+        
+        // Update chat history with the greeting
+        updateChatHistory('assistant', greeting);
+
+        // Load previous chat history after the greeting
+        chrome.storage.local.get(['chatHistory'], function(result) {
+          if (result.chatHistory && result.chatHistory.length > 0) {
+            // Skip the first message if it's a greeting
+            const existingHistory = result.chatHistory.filter((msg, index) => 
+              !(index === 0 && msg.role === 'assistant' && msg.content.includes('👋'))
+            );
+            chatContext.messageHistory = existingHistory;
+            existingHistory.forEach(msg => {
+              addMessageToChat(msg.role, msg.content);
+            });
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error in initializeChatContext:', error);
+      addErrorMessage('Failed to initialize chat context. Please refresh the page.');
+    }
+  }
+  
+  // Update sendMessage function to use chat context
+  async function sendMessage() {
+    const chatInput = document.querySelector(".chat-input");
+    const userMessage = chatInput.value.trim();
+    const chatMessages = document.querySelector(".chat-messages");
+  
+    if (!userMessage) return;
+  
+    // Add user message to chat
+    addMessageToChat('user', userMessage);
+    chatInput.value = "";
+  
+    // Show loading indicator
+    const loadingMessage = addLoadingMessage();
+  
+    try {
+      // Get API key from storage
+      const result = await chrome.storage.local.get(["geminiApiKey"]);
+      
+      if (!result.geminiApiKey) {
+        throw new Error("Please set your Gemini API key in the extension popup first.");
+      }
+  
+      // Add message to context
+      chatContext.messageHistory.push({
+        role: 'user',
+        content: userMessage
+      });
+  
+      // Get AI response
+      const response = await makeGeminiApiRequest(result.geminiApiKey, userMessage);
+      
+      // Remove loading message
+      loadingMessage.remove();
+  
+      // Add AI response to chat
+      addMessageToChat('ai', response);
+  
+      // Add to context
+      chatContext.messageHistory.push({
+        role: 'assistant',
+        content: response
+      });
+  
+    } catch (error) {
+      loadingMessage.remove();
+      addErrorMessage(error.message);
+    }
+  
+    // Scroll to bottom
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+  
+  // Helper functions for chat UI
+  function addMessageToChat(role, content) {
+    const chatMessages = document.querySelector(".chat-messages");
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `${role}-message`;
+    messageDiv.innerHTML = `<p>${formatMessage(content)}</p>`;
+    chatMessages.appendChild(messageDiv);
+  }
+  
+  function addLoadingMessage() {
+    const chatMessages = document.querySelector(".chat-messages");
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'ai-message loading';
+    loadingDiv.innerHTML = '<p>Thinking</p>';
+    chatMessages.appendChild(loadingDiv);
+    return loadingDiv;
+  }
+  
+  function addErrorMessage(error) {
+    const chatMessages = document.querySelector(".chat-messages");
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'ai-message error';
+    errorDiv.innerHTML = `<p>Error: ${error}</p>`;
+    chatMessages.appendChild(errorDiv);
+  }
+  
+  // Format message with markdown and code highlighting
+  function formatMessage(message) {
+    // Add your preferred markdown and code highlighting library here
+    return message.replace(/```([^`]+)```/g, '<pre><code>$1</code></pre>')
+                  .replace(/`([^`]+)`/g, '<code>$1</code>')
+                  .replace(/\n/g, '<br>');
   }
   
   // Alternative approach: Direct button injection
@@ -453,10 +534,6 @@ function addChatMessage(sender, text) {
       <div class="chat-input-container">
         <textarea class="chat-input" placeholder="Ask a question about this problem..."></textarea>
         <button class="send-message-btn">Send</button>
-      </div>
-      <div class="api-key-container">
-        <input type="password" class="gemini-api-key" placeholder="Enter your Gemini API key">
-        <button class="save-api-key-btn">Save Key</button>
       </div>
     `;
     chatContainer.style.position = "fixed";
@@ -508,26 +585,6 @@ function addChatMessage(sender, text) {
     sendButton.style.marginLeft = "10px";
     sendButton.style.cursor = "pointer";
   
-    const apiKeyContainer = chatContainer.querySelector(".api-key-container");
-    apiKeyContainer.style.padding = "10px";
-    apiKeyContainer.style.borderTop = "1px solid #ddd";
-    apiKeyContainer.style.display = "flex";
-  
-    const apiKeyInput = chatContainer.querySelector(".gemini-api-key");
-    apiKeyInput.style.flex = "1";
-    apiKeyInput.style.padding = "8px";
-    apiKeyInput.style.border = "1px solid #ddd";
-    apiKeyInput.style.borderRadius = "4px";
-  
-    const saveKeyButton = chatContainer.querySelector(".save-api-key-btn");
-    saveKeyButton.style.backgroundColor = "#34A853";
-    saveKeyButton.style.color = "white";
-    saveKeyButton.style.border = "none";
-    saveKeyButton.style.borderRadius = "4px";
-    saveKeyButton.style.padding = "0 15px";
-    saveKeyButton.style.marginLeft = "10px";
-    saveKeyButton.style.cursor = "pointer";
-  
     floatingButton.addEventListener("click", function () {
       chatContainer.style.display = "flex";
       extractProblemData();
@@ -544,8 +601,6 @@ function addChatMessage(sender, text) {
         sendMessage();
       }
     });
-  
-    document.querySelector(".save-api-key-btn").addEventListener("click", saveApiKey);
   
     chrome.storage.local.get(["gemini-api-key"], function (result) {
       if (result.geminiApiKey) {
@@ -612,4 +667,150 @@ function addChatMessage(sender, text) {
       initializeExtension();
     }
   }, 3000);
+  
+  // Add function to check if we're on a problem page
+  function isProblemPage() {
+    return window.location.href.includes('/problems/') || 
+           document.querySelector('.problem-text') !== null ||
+           document.querySelector('.text-2xl.font-medium') !== null;
+  }
+  
+  // Update observer to be more resilient
+  function observeProblemChanges() {
+    if (!isProblemPage()) return;
+
+    const observer = new MutationObserver(() => {
+        if (isProblemPage()) {
+            const newDetails = extractProblemDetails();
+            if (newDetails && 
+                (!chatContext.problemDetails || 
+                 chatContext.problemDetails.title !== newDetails.title)) {
+                console.log('Problem changed, updating context...');
+                chatContext.messageHistory = [];
+                chatContext.problemDetails = newDetails;
+                initializeChatContext();
+            }
+        }
+    });
+
+    // Observe the entire main content area
+    const mainContent = document.querySelector('main') || document.body;
+    observer.observe(mainContent, {
+        subtree: true,
+        childList: true,
+        characterData: true
+    });
+  }
+  
+  // Initialize when the page loads
+  document.addEventListener('DOMContentLoaded', () => {
+    if (isProblemPage()) {
+        setTimeout(() => {
+            const details = extractProblemDetails();
+            console.log('Initial problem details:', details);
+            chatContext.problemDetails = details;
+            initializeChatContext();
+            observeProblemChanges();
+        }, 1000);
+    }
+  });
+  
+  function isRelevantMessage(message) {
+    const relevantKeywords = [
+      'code', 'problem', 'solution', 'algorithm', 'error', 'bug', 'function',
+      'programming', 'debug', 'help', 'explain', 'how', 'why', 'what',
+      'complexity', 'time', 'space', 'approach', 'method', 'implement',
+      'optimize', 'improve', 'fix', 'issue', 'test', 'case', 'example',
+      'hint', 'stuck', 'understand', 'logic', 'data', 'structure'
+    ];
+
+    const irrelevantPatterns = [
+      /^(hi|hello|hey)$/i,
+      /how are you/i,
+      /weather/i,
+      /sports/i,
+      /movies/i,
+      /music/i,
+      /\b(eat|food|drink)\b/i,
+      /\b(game|play)\b/i,
+      /\b(chat|talk)\b/i
+    ];
+
+    if (chatContext.messageHistory.length === 0 && /^(hi|hello|hey)$/i.test(message.trim())) {
+      return true;
+    }
+
+    if (irrelevantPatterns.some(pattern => pattern.test(message))) {
+      return false;
+    }
+
+    const messageLower = message.toLowerCase();
+    return relevantKeywords.some(keyword => messageLower.includes(keyword));
+  }
+
+  function updateChatHistory(role, message, isRelevant = true) {
+    if (isRelevant) {
+      chatContext.messageHistory.push({
+        role,
+        content: message,
+        timestamp: new Date().toISOString()
+      });
+
+      if (chatContext.messageHistory.length > chatContext.maxHistoryLength * 2) {
+        chatContext.messageHistory = chatContext.messageHistory.slice(-chatContext.maxHistoryLength * 2);
+      }
+    }
+  }
+
+  function formatChatHistoryForPrompt() {
+    return chatContext.messageHistory
+      .map(msg => `${msg.role}: ${msg.content}`)
+      .join('\n\n');
+  }
+  
+  // Add this function near the top of your file, after chatContext initialization
+  function detectProgrammingLanguage() {
+    try {
+      // Find the language selector element
+      const languageSelector = document.querySelector('.ant-select-selection-item');
+      if (languageSelector) {
+        const languageText = languageSelector.textContent.trim();
+        
+        // Map common language displays to standardized names
+        const languageMap = {
+          'C++14': 'cpp',
+          'C++17': 'cpp',
+          'C++': 'cpp',
+          'Python3': 'python',
+          'Python': 'python',
+          'Java': 'java',
+          'JavaScript': 'javascript',
+          'JS': 'javascript',
+          'C#': 'csharp',
+          'Go': 'go',
+          'Ruby': 'ruby',
+          'PHP': 'php',
+          'Swift': 'swift',
+          'Kotlin': 'kotlin',
+          'Rust': 'rust'
+        };
+
+        // Try to find a match in our language map
+        for (const [key, value] of Object.entries(languageMap)) {
+          if (languageText.includes(key)) {
+            console.log('Detected programming language:', value);
+            return value;
+          }
+        }
+      }
+
+      // Default to C++ if no language is detected
+      console.log('No language detected, defaulting to cpp');
+      return 'cpp';
+    } catch (error) {
+      console.error('Error detecting programming language:', error);
+      return 'cpp'; // Default to C++ in case of error
+    }
+  }
+  
   
