@@ -141,62 +141,81 @@ function addChatMessage(sender, text) {
   function extractProblemDetails() {
     try {
       // Extract problem title
-      const titleElement = document.querySelector('.problem_heading.fs-4');
-      
-      // Extract difficulty and other metadata
-      const metadataElements = document.querySelectorAll('.problem_paragraph.mb-0');
-      const difficultyElement = metadataElements[0];
-      const timeLimit = metadataElements[2];
-      const memoryLimit = metadataElements[4];
-      const score = metadataElements[6];
+      const titleElement = document.querySelector('.text-2xl.font-medium, .problem_heading.fs-4');
 
       // Extract problem description
       const descriptionElement = document.querySelector('.coding_desc__pltWY');
       
-      // Extract input/output format and constraints
-      const inputFormatElement = document.querySelector('h5.problem_heading:contains("Input Format") + div');
-      const outputFormatElement = document.querySelector('h5.problem_heading:contains("Output Format") + div');
-      const constraintsElement = document.querySelector('h5.problem_heading:contains("Constraints") + div');
+      // Extract input format
+      const inputFormatSection = document.querySelector('h5.problem_heading.mt-4:contains("Input Format")');
+      const inputFormatElement = inputFormatSection?.nextElementSibling?.querySelector('.coding_input_format__pv9fS');
+      
+      // Extract output format
+      const outputFormatSection = document.querySelector('h5.problem_heading.mt-4:contains("Output Format")');
+      const outputFormatElement = outputFormatSection?.nextElementSibling?.querySelector('.coding_input_format__pv9fS');
+      
+      // Extract constraints
+      const constraintsSection = document.querySelector('h5.problem_heading.mt-4:contains("Constraints")');
+      const constraintsElement = constraintsSection?.nextElementSibling?.querySelector('.coding_input_format__pv9fS');
       
       // Extract sample test cases
-      const sampleInputs = Array.from(document.querySelectorAll('.coding_input_format__pv9fS'))
-        .filter((el, i) => i % 2 === 0)
+      const sampleInputs = Array.from(document.querySelectorAll('.coding_input_format_container__iYezu .coding_input_format__pv9fS'))
+        .filter((_, i) => i % 2 === 0)
         .map(el => el.textContent.trim());
-      const sampleOutputs = Array.from(document.querySelectorAll('.coding_input_format__pv9fS'))
-        .filter((el, i) => i % 2 === 1)
+        
+      const sampleOutputs = Array.from(document.querySelectorAll('.coding_input_format_container__iYezu .coding_input_format__pv9fS'))
+        .filter((_, i) => i % 2 === 1)
         .map(el => el.textContent.trim());
 
-      // Combine the samples
-      const samples = sampleInputs.map((input, i) => ({
-        input: input,
-        output: sampleOutputs[i]
-      }));
+      // Extract metadata (difficulty, time limit, etc.)
+      const metadataElements = document.querySelectorAll('.problem_paragraph.mb-0');
+      let difficulty = '', timeLimit = '', memoryLimit = '', score = '';
+      
+      metadataElements.forEach((el, index) => {
+        const text = el.textContent.trim();
+        if (index === 0) difficulty = text;
+        if (index === 2) timeLimit = text;
+        if (index === 4) memoryLimit = text;
+        if (index === 6) score = text;
+      });
+
+      // Extract notes if available
+      const notesSection = document.querySelector('h5.problem_heading.mt-4:contains("Note")');
+      const notesElement = notesSection?.nextElementSibling?.querySelector('.coding_input_format__pv9fS');
 
       const problemDetails = {
         title: titleElement?.textContent?.trim() || 'Unknown Problem',
-        difficulty: difficultyElement?.textContent?.trim() || 'Unknown',
-        timeLimit: timeLimit?.textContent?.trim() || 'N/A',
-        memoryLimit: memoryLimit?.textContent?.trim() || 'N/A',
-        score: score?.textContent?.trim() || 'N/A',
+        difficulty: difficulty || 'Unknown',
+        timeLimit: timeLimit || 'N/A',
+        memoryLimit: memoryLimit || 'N/A',
+        score: score || 'N/A',
         description: descriptionElement?.textContent?.trim() || '',
         inputFormat: inputFormatElement?.textContent?.trim() || '',
         outputFormat: outputFormatElement?.textContent?.trim() || '',
         constraints: constraintsElement?.textContent?.trim() || '',
-        samples: samples,
-        programmingLanguage: detectProgrammingLanguage()
+        samples: sampleInputs.map((input, i) => ({
+          input: input,
+          output: sampleOutputs[i] || ''
+        })),
+        notes: notesElement?.textContent?.trim() || '',
+        programmingLanguage: detectProgrammingLanguage(),
+        url: window.location.href
       };
 
-      console.log('Extracted Problem Details:', problemDetails);
+      // Log successful extraction
+      console.log('Successfully extracted problem details:', problemDetails);
       return problemDetails;
 
     } catch (error) {
       console.error('Error extracting problem details:', error);
+      // Return minimal problem details in case of error
       return {
-        title: 'Unknown Problem',
+        title: document.querySelector('.text-2xl.font-medium, .problem_heading.fs-4')?.textContent?.trim() || 'Unknown Problem',
         difficulty: 'Unknown',
-        description: '',
+        description: document.querySelector('.coding_desc__pltWY')?.textContent?.trim() || '',
         samples: [],
-        programmingLanguage: detectProgrammingLanguage()
+        programmingLanguage: detectProgrammingLanguage(),
+        url: window.location.href
       };
     }
   }
@@ -385,26 +404,35 @@ Instructions:
       if (chatMessages) {
         chatMessages.innerHTML = '';
         
-        // Add the greeting message
-        const greeting = generateGreeting(details);
-        addMessageToChat('ai', greeting);
-        
-        // Update chat history with the greeting
-        updateChatHistory('assistant', greeting);
+        // Generate a more detailed initial analysis
+        const analysis = `I've analyzed the problem "${details.title}". Here's what I understand:
 
-        // Load previous chat history after the greeting
-        chrome.storage.local.get(['chatHistory'], function(result) {
-          if (result.chatHistory && result.chatHistory.length > 0) {
-            // Skip the first message if it's a greeting
-            const existingHistory = result.chatHistory.filter((msg, index) => 
-              !(index === 0 && msg.role === 'assistant' && msg.content.includes('👋'))
-            );
-            chatContext.messageHistory = existingHistory;
-            existingHistory.forEach(msg => {
-              addMessageToChat(msg.role, msg.content);
-            });
-          }
-        });
+📝 Problem Type: ${getProblemType(details.description)}
+🎯 Difficulty: ${details.difficulty}
+⏱️ Time Limit: ${details.timeLimit}
+💾 Memory Limit: ${details.memoryLimit}
+🏆 Score: ${details.score}
+
+Key Requirements:
+${summarizeRequirements(details.description)}
+
+Input Format:
+${details.inputFormat}
+
+Output Format:
+${details.outputFormat}
+
+There are ${details.samples.length} sample test cases provided.
+
+How would you like to approach this problem? I can help you with:
+1. Understanding the problem requirements
+2. Developing an algorithm
+3. Implementation in ${details.programmingLanguage}
+4. Optimizing the solution
+5. Test case analysis`;
+
+        addMessageToChat('ai', analysis);
+        updateChatHistory('assistant', analysis);
       }
     } catch (error) {
       console.error('Error in initializeChatContext:', error);
@@ -721,7 +749,7 @@ Instructions:
       'programming', 'debug', 'help', 'explain', 'how', 'why', 'what',
       'complexity', 'time', 'space', 'approach', 'method', 'implement',
       'optimize', 'improve', 'fix', 'issue', 'test', 'case', 'example',
-      'hint', 'stuck', 'understand', 'logic', 'data', 'structure'
+      'hint', 'stuck', 'understand', 'logic', 'data', 'structure','solve'
     ];
 
     const irrelevantPatterns = [
@@ -811,6 +839,36 @@ Instructions:
       console.error('Error detecting programming language:', error);
       return 'cpp'; // Default to C++ in case of error
     }
+  }
+  
+  // Helper function to find elements by text content
+  function getElementByText(selector, text) {
+    return Array.from(document.querySelectorAll(selector))
+      .find(el => el.textContent.trim().toLowerCase().includes(text.toLowerCase()));
+  }
+  
+  // Helper function to determine problem type
+  function getProblemType(description) {
+    const types = {
+      'array': ['array', 'elements', 'sequence'],
+      'string': ['string', 'substring', 'palindrome'],
+      'graph': ['graph', 'tree', 'path'],
+      'dynamic programming': ['maximum', 'minimum', 'optimal'],
+      'greedy': ['smallest', 'largest', 'maximum possible']
+    };
+
+    for (const [type, keywords] of Object.entries(types)) {
+      if (keywords.some(keyword => description.toLowerCase().includes(keyword))) {
+        return type.charAt(0).toUpperCase() + type.slice(1);
+      }
+    }
+    return 'Algorithm';
+  }
+
+  // Helper function to summarize requirements
+  function summarizeRequirements(description) {
+    const sentences = description.split('.');
+    return sentences.slice(0, 2).join('.') + '.';
   }
   
   
