@@ -11,6 +11,7 @@
     --color-user-message: #2563eb;
     --color-user-message-text: #ffffff;
     --color-shadow: rgba(0, 0, 0, 0.1);
+    --color-success: #118B50;
     --gradient_dark_button_color_1: #2563eb;
     --gradient_dark_button_color_2: #1d4ed8;
     --gradient_dark_button_text_color: #ffffff;
@@ -87,7 +88,7 @@
 .ai-chat-container {
     position: fixed;
     bottom: 90px;
-    right: 30px;
+    left: 80px;
     width: 400px;
     height: 600px;
     background-color: var(--color-background-primary);
@@ -368,11 +369,11 @@
 }
 
 #saveApiKey:hover {
-    background-color: var(--color-primary-dark);
+    background-color: var(--gradient_dark_button_color_2);
 }
 
 #saveApiKey.success {
-    background-color: var(--color-secondary);
+    background-color: var(--color-success);
 }
 
 .api-note {
