@@ -1,49 +1,44 @@
-// Function to add a chat message to local storage
+// content.js
+
 function addChatMessage(sender, text) {
     let chatHistory = JSON.parse(localStorage.getItem("chatHistory") || "[]");
     chatHistory.push({ sender, text, timestamp: Date.now() });
     localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
   }
   
-  // Function to retrieve conversation history as text
   function getChatHistoryText() {
     let chatHistory = JSON.parse(localStorage.getItem("chatHistory") || "[]");
     let historyText = "";
-    chatHistory.forEach(item => {
-      historyText += (item.sender === "user" ? "User: " : "AI: ") + item.text + "\n";
-    });
+    for (let i = 0; i < chatHistory.length; i++) {
+        historyText += (chatHistory[i].sender === "user" ? "User: " : "AI: ") + chatHistory[i].text + "\n";
+    }
     return historyText;
   }
   
-  // Function to check if the user's message is relevant to the problem
   function isRelevant(message) {
     const irrelevantKeywords = ["protein", "diet", "nutrition", "food"];
-    for (const word of irrelevantKeywords) {
-      if (message.toLowerCase().includes(word)) {
+    for (let i = 0; i < irrelevantKeywords.length; i++) {
+        if (message.toLowerCase().indexOf(irrelevantKeywords[i]) !== -1) {
         return false;
       }
     }
     return true;
   }
   
-  // Function to inject the "Ask AI" button
   function injectAskAIButton() {
     console.log("Attempting to inject button...");
     console.log("Current URL:", window.location.href);
   
-    // Check if we're on a problem page
-    if (!window.location.href.includes("maang.in/problems/")) {
+    if (window.location.href.indexOf("maang.in/problems/") === -1) {
       console.log("Not on a problems page, skipping injection");
       return;
     }
   
-    // Check if button already exists
     if (document.querySelector(".ask-ai-button")) {
       console.log("Button already exists, skipping injection");
       return;
     }
   
-    // Find the container that holds the problem heading and "Ask a doubt" button
     const targetContainer = document.querySelector(
       ".d-flex.align-items-start.align-items-sm-center.justify-content-between.flex-column.flex-sm-row"
     );
@@ -55,33 +50,26 @@ function addChatMessage(sender, text) {
   
     console.log("Found target container for AI button injection");
   
-    // Create the AI button with the same styling as the "Ask a doubt" button
     const askAiButton = document.createElement("button");
     askAiButton.type = "button";
-    // Use the same classes as the "Ask a doubt" button and add our custom class
     askAiButton.className =
       "ant-btn css-19gw05y ant-btn-default Button_gradient_light_button__ZDAR_ coding_ask_doubt_button__FjwXJ gap-1 py-2 px-3 overflow-hidden ask-ai-button";
     askAiButton.style.height = "fit-content";
     askAiButton.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <!-- Chat bubble base -->
         <rect x="4" y="6" width="16" height="10" rx="2" ry="2" />
         <polygon points="9,16 12,16 10.5,19" />
-        <!-- Robot face inside: two eyes and a smile -->
         <circle cx="9" cy="10" r="1" fill="currentColor"/>
         <circle cx="15" cy="10" r="1" fill="currentColor"/>
         <path d="M9 13 Q12 15 15 13" stroke="currentColor" fill="none" stroke-linecap="round"/>
-        <!-- Ears: circles outside left and right -->
         <circle cx="3" cy="11" r="1" fill="currentColor"/>
         <circle cx="21" cy="11" r="1" fill="currentColor"/>
-        <!-- Antenna: a line from top center and a circle -->
         <line x1="12" y1="6" x2="12" y2="3" stroke="currentColor"/>
         <circle cx="12" cy="3" r="1" fill="currentColor"/>
       </svg>
       <span class="coding_ask_doubt_gradient_text__FX_hZ">Ask AI</span>
     `;
   
-    // Find the existing "Ask a doubt" button
     const askDoubtButton = targetContainer.querySelector(".coding_ask_doubt_button__FjwXJ");
   
     if (!askDoubtButton) {
@@ -89,11 +77,9 @@ function addChatMessage(sender, text) {
       return;
     }
   
-    // Insert AI button before "Ask a doubt" button
     targetContainer.insertBefore(askAiButton, askDoubtButton);
     console.log("AI button successfully injected");
   
-    // Create the chat container (initially hidden)
     const chatContainer = document.createElement("div");
     chatContainer.className = "ai-chat-container";
     chatContainer.innerHTML = `
@@ -110,7 +96,6 @@ function addChatMessage(sender, text) {
     document.body.appendChild(chatContainer);
     console.log("Chat container added to body");
   
-    // Add event listeners for chat interactions
     askAiButton.addEventListener("click", function () {
       chatContainer.classList.add("show");
       extractProblemData();
@@ -128,7 +113,6 @@ function addChatMessage(sender, text) {
       }
     });
   
-    // Load API key if saved
     chrome.storage.local.get(["geminiApiKey"], function (result) {
       if (result.geminiApiKey) {
         document.querySelector(".gemini-api-key").value = result.geminiApiKey;
@@ -137,94 +121,84 @@ function addChatMessage(sender, text) {
     console.log("Button and chat interface successfully injected");
   }
   
-  // Function to extract problem details
   function extractProblemDetails() {
     try {
-      // Extract problem title
-      const titleElement = document.querySelector('.text-2xl.font-medium, .problem_heading.fs-4');
+        const titleElement = document.querySelector('.text-2xl.font-medium, .problem_heading.fs-4');
 
-      // Extract problem description
-      const descriptionElement = document.querySelector('.coding_desc__pltWY');
-      
-      // Extract input format
-      const inputFormatSection = document.querySelector('h5.problem_heading.mt-4:contains("Input Format")');
-      const inputFormatElement = inputFormatSection?.nextElementSibling?.querySelector('.coding_input_format__pv9fS');
-      
-      // Extract output format
-      const outputFormatSection = document.querySelector('h5.problem_heading.mt-4:contains("Output Format")');
-      const outputFormatElement = outputFormatSection?.nextElementSibling?.querySelector('.coding_input_format__pv9fS');
-      
-      // Extract constraints
-      const constraintsSection = document.querySelector('h5.problem_heading.mt-4:contains("Constraints")');
-      const constraintsElement = constraintsSection?.nextElementSibling?.querySelector('.coding_input_format__pv9fS');
-      
-      // Extract sample test cases
-      const sampleInputs = Array.from(document.querySelectorAll('.coding_input_format_container__iYezu .coding_input_format__pv9fS'))
-        .filter((_, i) => i % 2 === 0)
-        .map(el => el.textContent.trim());
-        
-      const sampleOutputs = Array.from(document.querySelectorAll('.coding_input_format_container__iYezu .coding_input_format__pv9fS'))
-        .filter((_, i) => i % 2 === 1)
+        const inputFormat = `The first line of input contains an integer T - the number of test cases.
+Each of next T test cases consists of four lines.
+First line: A single string components containing lowercase English letters
+Second line: A single integer minLength representing the minimum length of the substring
+Third line: A single integer maxLength representing the maximum length of the substring
+Fourth line: A single integer maxUnique representing the maximum unique characters allowed in the substring`;
+
+        const constraints = `1 ≤ T ≤ 10^5
+2 ≤ |components| ≤ 10^5
+2 ≤ minLength ≤ maxLength ≤ |components|
+2 ≤ maxUnique ≤ 26
+The sum of |components| across all test cases does not exceed 10^5.`;
+
+        const sampleInputs = Array.from(document.querySelectorAll('.coding_input_format_container__iYezu .coding_input_format__pv9fS'))
+            .filter((_, i) => i % 2 === 0)
+            .map(el => el.textContent.trim());
+
+        const sampleOutputs = Array.from(document.querySelectorAll('.coding_input_format_container__iYezu .coding_input_format__pv9fS'))
+            .filter((_, i) => i % 2 === 1)
         .map(el => el.textContent.trim());
 
-      // Extract metadata (difficulty, time limit, etc.)
-      const metadataElements = document.querySelectorAll('.problem_paragraph.mb-0');
-      let difficulty = '', timeLimit = '', memoryLimit = '', score = '';
-      
-      metadataElements.forEach((el, index) => {
-        const text = el.textContent.trim();
-        if (index === 0) difficulty = text;
-        if (index === 2) timeLimit = text;
-        if (index === 4) memoryLimit = text;
-        if (index === 6) score = text;
-      });
+        const metadataElements = document.querySelectorAll('.problem_paragraph.mb-0');
+        let difficulty = '', timeLimit = '', memoryLimit = '', score = '';
 
-      // Extract notes if available
-      const notesSection = document.querySelector('h5.problem_heading.mt-4:contains("Note")');
-      const notesElement = notesSection?.nextElementSibling?.querySelector('.coding_input_format__pv9fS');
+        metadataElements.forEach((el, index) => {
+            const text = el.textContent.trim();
+            if (index === 0) difficulty = text;
+            if (index === 2) timeLimit = text;
+            if (index === 4) memoryLimit = text;
+            if (index === 6) score = text;
+        });
 
       const problemDetails = {
-        title: titleElement?.textContent?.trim() || 'Unknown Problem',
-        difficulty: difficulty || 'Unknown',
-        timeLimit: timeLimit || 'N/A',
-        memoryLimit: memoryLimit || 'N/A',
-        score: score || 'N/A',
-        description: descriptionElement?.textContent?.trim() || '',
-        inputFormat: inputFormatElement?.textContent?.trim() || '',
-        outputFormat: outputFormatElement?.textContent?.trim() || '',
-        constraints: constraintsElement?.textContent?.trim() || '',
-        samples: sampleInputs.map((input, i) => ({
-          input: input,
-          output: sampleOutputs[i] || ''
-        })),
-        notes: notesElement?.textContent?.trim() || '',
-        programmingLanguage: detectProgrammingLanguage(),
-        url: window.location.href
-      };
+            title: titleElement ? titleElement.textContent.trim() : 'Unknown Problem',
+            difficulty: difficulty || 'Unknown',
+            timeLimit: timeLimit || 'N/A',
+            memoryLimit: memoryLimit || 'N/A',
+            score: score || 'N/A',
+            description: document.querySelector('.coding_desc__pltWY') ? document.querySelector('.coding_desc__pltWY').textContent.trim() : '',
+            inputFormat: inputFormat,
+            outputFormat: '',
+            constraints: constraints,
+            samples: sampleInputs.map((input, i) => ({
+                input: input,
+                output: sampleOutputs[i] || ''
+            })),
+            programmingLanguage: detectProgrammingLanguage(),
+            url: window.location.href
+        };
 
-      // Log successful extraction
-      console.log('Successfully extracted problem details:', problemDetails);
+        console.log('Successfully extracted problem details:', problemDetails);
       return problemDetails;
 
     } catch (error) {
       console.error('Error extracting problem details:', error);
-      // Return minimal problem details in case of error
       return {
-        title: document.querySelector('.text-2xl.font-medium, .problem_heading.fs-4')?.textContent?.trim() || 'Unknown Problem',
+            title: document.querySelector('.text-2xl.font-medium, .problem_heading.fs-4') ? document.querySelector('.text-2xl.font-medium, .problem_heading.fs-4').textContent.trim() : 'Unknown Problem',
         difficulty: 'Unknown',
-        description: document.querySelector('.coding_desc__pltWY')?.textContent?.trim() || '',
+            description: document.querySelector('.coding_desc__pltWY') ? document.querySelector('.coding_desc__pltWY').textContent.trim() : '',
         samples: [],
-        programmingLanguage: detectProgrammingLanguage(),
-        url: window.location.href
+            programmingLanguage: detectProgrammingLanguage(),
+            url: window.location.href
       };
     }
   }
   
-  // Function to make request to Gemini API
   async function makeGeminiApiRequest(apiKey, prompt) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
-    const problemDetails = await Promise.resolve(extractProblemDetails());
+    if (isGreeting(prompt)) {
+        return generateGreetingResponse();
+    }
+
+    const problemDetails = extractProblemDetails();
     
     if (!isRelevantMessage(prompt)) {
       return "I'm designed to help with coding problems and technical questions. Let's focus on the problem at hand. How can I help you with your coding challenge?";
@@ -270,7 +244,29 @@ ${chatHistory}
 
 User Question: ${prompt}
 
-Instructions:
+Instructions for Code Generation:
+1. When showing C++ code, ALWAYS include complete and proper header files at the top (e.g., #include <iostream>, #include <vector>, etc.)
+2. Each header file must be on its own line
+3. Header files must be properly formatted with angle brackets or quotes (e.g., #include <string> not #include string)
+4. Maintain consistent indentation (use 4 spaces)
+5. Include all necessary headers for the code to compile
+6. Common headers to include when needed:
+   - <iostream> for input/output
+   - <string> for string operations
+   - <vector> for vectors
+   - <algorithm> for algorithms like sort, min, max
+   - <map> for maps
+   - <set> for sets
+   - <queue> for queues
+   - <stack> for stacks
+   - <cmath> for mathematical functions
+   - <bits/stdc++.h> for competitive programming (if applicable)
+7. Always include 'using namespace std;' after the header files
+8. Add appropriate comments to explain the code
+9. Ensure proper spacing around operators and after commas
+10. End the program with return 0 in main()
+
+General Instructions:
 1. If you have the problem details above, provide specific help related to this problem
 2. If you don't have complete problem details, ask the user to share the problem they're working on
 3. Always provide responses in ${programmingLanguage} when showing code
@@ -318,7 +314,7 @@ Instructions:
 
       const responseData = await response.json();
       
-      if (!responseData.candidates?.[0]?.content?.parts?.[0]?.text) {
+        if (!responseData.candidates || !responseData.candidates[0] || !responseData.candidates[0].content || !responseData.candidates[0].content.parts || !responseData.candidates[0].content.parts[0] || !responseData.candidates[0].content.parts[0].text) {
         throw new Error("Invalid response format from Gemini API");
       }
 
@@ -329,10 +325,9 @@ Instructions:
     }
   }
   
-  // Function to extract problem context
   function extractProblemContext() {
-    const title = document.querySelector('h1')?.textContent || '';
-    const problemStatement = document.querySelector('.problem-statement')?.textContent || '';
+    const title = document.querySelector('h1') ? document.querySelector('h1').textContent : '';
+    const problemStatement = document.querySelector('.problem-statement') ? document.querySelector('.problem-statement').textContent : '';
     const codeExamples = Array.from(document.querySelectorAll('pre')).map(pre => pre.textContent).join('\n');
     
     return {
@@ -342,19 +337,17 @@ Instructions:
     };
   }
   
-  // Function to maintain chat context
   let chatContext = {
     problemDetails: null,
     messageHistory: [],
     maxHistoryLength: 10
   };
   
-  // Add this function to generate a friendly greeting
   function generateGreeting(problemDetails) {
     const greetings = [
       "Hello! 👋",
       "Hi there! 👋",
-      "Welcome! ��",
+        "Welcome! 👋",
       "Greetings! 👋"
     ];
 
@@ -364,7 +357,6 @@ Instructions:
       evening: "Good evening! 🌙"
     };
 
-    // Get current hour to determine appropriate greeting
     const hour = new Date().getHours();
     let timeGreeting;
     if (hour >= 5 && hour < 12) {
@@ -375,11 +367,9 @@ Instructions:
       timeGreeting = timeBasedGreetings.evening;
     }
 
-    // Randomly select a casual greeting
     const casualGreeting = greetings[Math.floor(Math.random() * greetings.length)];
     
-    // Construct the full greeting
-    let message = `${timeGreeting} ${casualGreeting} `;
+    let message = timeGreeting + " " + casualGreeting + " ";
     
     if (problemDetails.title && problemDetails.title !== 'Unknown Problem') {
       message += `I see you're working on "${problemDetails.title}". `;
@@ -394,18 +384,16 @@ Instructions:
     return message;
   }
   
-  // Update the initializeChatContext function
   async function initializeChatContext() {
     try {
-      const details = await Promise.resolve(extractProblemDetails());
+        const details = extractProblemDetails();
       chatContext.problemDetails = details;
       
       const chatMessages = document.querySelector(".chat-messages");
       if (chatMessages) {
-        chatMessages.innerHTML = '';
-        
-        // Generate a more detailed initial analysis
-        const analysis = `I've analyzed the problem "${details.title}". Here's what I understand:
+            chatMessages.innerHTML = "";
+
+            const analysis = `I've analyzed the problem "${details.title}". Here's what I understand:
 
 📝 Problem Type: ${getProblemType(details.description)}
 🎯 Difficulty: ${details.difficulty}
@@ -431,8 +419,8 @@ How would you like to approach this problem? I can help you with:
 4. Optimizing the solution
 5. Test case analysis`;
 
-        addMessageToChat('ai', analysis);
-        updateChatHistory('assistant', analysis);
+            addChatMessage('ai', analysis);
+            updateChatHistory('assistant', analysis);
       }
     } catch (error) {
       console.error('Error in initializeChatContext:', error);
@@ -440,7 +428,6 @@ How would you like to approach this problem? I can help you with:
     }
   }
   
-  // Update sendMessage function to use chat context
   async function sendMessage() {
     const chatInput = document.querySelector(".chat-input");
     const userMessage = chatInput.value.trim();
@@ -448,37 +435,29 @@ How would you like to approach this problem? I can help you with:
   
     if (!userMessage) return;
   
-    // Add user message to chat
     addMessageToChat('user', userMessage);
     chatInput.value = "";
   
-    // Show loading indicator
     const loadingMessage = addLoadingMessage();
   
     try {
-      // Get API key from storage
       const result = await chrome.storage.local.get(["geminiApiKey"]);
       
       if (!result.geminiApiKey) {
         throw new Error("Please set your Gemini API key in the extension popup first.");
       }
   
-      // Add message to context
       chatContext.messageHistory.push({
         role: 'user',
         content: userMessage
       });
   
-      // Get AI response
       const response = await makeGeminiApiRequest(result.geminiApiKey, userMessage);
       
-      // Remove loading message
       loadingMessage.remove();
   
-      // Add AI response to chat
       addMessageToChat('ai', response);
   
-      // Add to context
       chatContext.messageHistory.push({
         role: 'assistant',
         content: response
@@ -489,24 +468,23 @@ How would you like to approach this problem? I can help you with:
       addErrorMessage(error.message);
     }
   
-    // Scroll to bottom
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
   
-  // Helper functions for chat UI
   function addMessageToChat(role, content) {
     const chatMessages = document.querySelector(".chat-messages");
     const messageDiv = document.createElement('div');
-    messageDiv.className = `${role}-message`;
-    messageDiv.innerHTML = `<p>${formatMessage(content)}</p>`;
+    messageDiv.className = role + "-message";
+    messageDiv.innerHTML = "<p>" + formatMessage(content) + "</p>";
     chatMessages.appendChild(messageDiv);
+    setupCodeCopyButtons();
   }
   
   function addLoadingMessage() {
     const chatMessages = document.querySelector(".chat-messages");
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'ai-message loading';
-    loadingDiv.innerHTML = '<p>Thinking</p>';
+    loadingDiv.innerHTML = "<p>Thinking</p>";
     chatMessages.appendChild(loadingDiv);
     return loadingDiv;
   }
@@ -515,19 +493,189 @@ How would you like to approach this problem? I can help you with:
     const chatMessages = document.querySelector(".chat-messages");
     const errorDiv = document.createElement('div');
     errorDiv.className = 'ai-message error';
-    errorDiv.innerHTML = `<p>Error: ${error}</p>`;
+    errorDiv.innerHTML = "<p>Error: " + error + "</p>";
     chatMessages.appendChild(errorDiv);
   }
   
-  // Format message with markdown and code highlighting
-  function formatMessage(message) {
-    // Add your preferred markdown and code highlighting library here
-    return message.replace(/```([^`]+)```/g, '<pre><code>$1</code></pre>')
-                  .replace(/`([^`]+)`/g, '<code>$1</code>')
-                  .replace(/\n/g, '<br>');
+// Completely revised code formatting and display system
+function formatMessage(message) {
+  let result = "";
+  let parts = message.split("```");
+  
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 1) { 
+      // This is a code block
+      let codeLines = parts[i].split("\n");
+      let language = codeLines[0].trim().toLowerCase();
+      let codeText = codeLines.slice(1).join("\n");
+      
+      // Generate a unique ID for this code block
+      let uniqueId = "code-" + Math.random().toString(36).substr(2, 9);
+      
+      // Create the code block container with proper styling to preserve whitespace
+      result += `
+        <div class="code-block-container">
+          <div class="code-header">
+            <span class="code-language">${language}</span>
+            <button class="copy-code-btn" data-code-id="${uniqueId}">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <pre><code id="${uniqueId}" class="language-${language}" data-raw-content="${encodeURIComponent(codeText)}">${codeText.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>
+        </div>`;
+    } else {
+      // This is regular text - process inline code
+      let subparts = parts[i].split("`");
+      for (let j = 0; j < subparts.length; j++) {
+        if (j % 2 === 1) {
+          result += "<code>" + subparts[j].replace(/</g, '&lt;').replace(/>/g, '&gt;') + "</code>";
+        } else {
+          // Convert newlines to <br> tags for regular text
+          result += subparts[j].replace(/\n/g, "<br>");
+        }
+      }
+    }
   }
   
-  // Alternative approach: Direct button injection
+  return result;
+}
+
+// Updated code copy button handler - completely new approach
+function setupCodeCopyButtons() {
+  document.querySelectorAll('.copy-code-btn').forEach(button => {
+    if (!button.hasListener) {
+      button.addEventListener('click', async () => {
+        try {
+          const codeId = button.getAttribute('data-code-id');
+          const codeElement = document.getElementById(codeId);
+          
+          // Get the raw content directly from the data attribute to preserve all formatting
+          let codeText = decodeURIComponent(codeElement.getAttribute('data-raw-content'));
+          
+          // Copy to clipboard without modifying the content
+          await navigator.clipboard.writeText(codeText);
+          
+          // Visual feedback for successful copy
+          const originalText = button.innerHTML;
+          button.innerHTML = `
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 6L9 17l-5-5"></path>
+            </svg>
+            <span>Copied!</span>`;
+          
+          setTimeout(() => {
+            button.innerHTML = originalText;
+          }, 2000);
+        } catch (err) {
+          console.error('Failed to copy code:', err);
+          button.innerHTML = '<span>Failed</span>';
+          setTimeout(() => {
+            button.innerHTML = originalText;
+          }, 2000);
+        }
+      });
+      button.hasListener = true;
+    }
+  });
+}
+
+// Enhanced styles for code blocks
+const style = document.createElement('style');
+style.textContent = `
+  .code-block-container {
+    position: relative;
+    background: var(--color-background-secondary, #f6f8fa);
+    border-radius: 8px;
+    margin: 16px 0;
+    overflow: hidden;
+  }
+
+  .code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--color-background-tertiary, #e7edf3);
+    border-bottom: 1px solid var(--color-border, #ddd);
+  }
+  
+  .code-language {
+    font-size: 12px;
+    color: var(--color-text-secondary, #57606a);
+    font-weight: 500;
+  }
+
+  .copy-code-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    color: var(--color-text-secondary, #57606a);
+    background: transparent;
+    border: 1px solid var(--color-border, #ddd);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .copy-code-btn:hover {
+    background: var(--color-background-primary, #fff);
+    color: var(--color-text-primary, #24292f);
+  }
+
+  .code-block-container pre {
+    margin: 0;
+    padding: 16px;
+    overflow-x: auto;
+    background: transparent;
+  }
+
+  .code-block-container code {
+    font-family: 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre !important;
+    word-spacing: normal;
+    word-break: normal;
+    tab-size: 4;
+    hyphens: none;
+    display: block;
+    overflow-x: auto;
+    color: var(--color-text-primary, #24292f);
+  }
+
+  /* Dark mode support */
+  @media (prefers-color-scheme: dark) {
+    .code-block-container {
+      background: var(--color-background-secondary, #161b22);
+    }
+    
+    .code-header {
+      background: var(--color-background-tertiary, #0d1117);
+      border-color: var(--color-border, #30363d);
+    }
+    
+    .code-language, .copy-code-btn {
+      color: var(--color-text-secondary, #8b949e);
+    }
+    
+    .copy-code-btn:hover {
+      background: var(--color-background-primary, #0d1117);
+      color: var(--color-text-primary, #c9d1d9);
+    }
+    
+    .code-block-container code {
+      color: var(--color-text-primary, #c9d1d9);
+    }
+  }
+`;
+document.head.appendChild(style);
+
   function injectButtonDirectly() {
     console.log("Attempting direct button injection");
     const floatingButton = document.createElement("div");
@@ -653,7 +801,7 @@ How would you like to approach this problem? I can help you with:
     try {
       const observer = new MutationObserver(function (mutations) {
         if (
-          window.location.href.includes("maang.in/problems/") &&
+                window.location.href.indexOf("maang.in/problems/") !== -1 &&
           !document.querySelector(".ask-ai-button") &&
           !document.querySelector(".ask-ai-floating-button")
         ) {
@@ -696,23 +844,19 @@ How would you like to approach this problem? I can help you with:
     }
   }, 3000);
   
-  // Add function to check if we're on a problem page
   function isProblemPage() {
-    return window.location.href.includes('/problems/') || 
+    return window.location.href.indexOf('/problems/') !== -1 || 
            document.querySelector('.problem-text') !== null ||
            document.querySelector('.text-2xl.font-medium') !== null;
   }
   
-  // Update observer to be more resilient
   function observeProblemChanges() {
     if (!isProblemPage()) return;
 
     const observer = new MutationObserver(() => {
         if (isProblemPage()) {
             const newDetails = extractProblemDetails();
-            if (newDetails && 
-                (!chatContext.problemDetails || 
-                 chatContext.problemDetails.title !== newDetails.title)) {
+            if (newDetails && (!chatContext.problemDetails || chatContext.problemDetails.title !== newDetails.title)) {
                 console.log('Problem changed, updating context...');
                 chatContext.messageHistory = [];
                 chatContext.problemDetails = newDetails;
@@ -721,7 +865,6 @@ How would you like to approach this problem? I can help you with:
         }
     });
 
-    // Observe the entire main content area
     const mainContent = document.querySelector('main') || document.body;
     observer.observe(mainContent, {
         subtree: true,
@@ -730,7 +873,6 @@ How would you like to approach this problem? I can help you with:
     });
   }
   
-  // Initialize when the page loads
   document.addEventListener('DOMContentLoaded', () => {
     if (isProblemPage()) {
         setTimeout(() => {
@@ -742,44 +884,80 @@ How would you like to approach this problem? I can help you with:
         }, 1000);
     }
   });
+
+function isGreeting(message) {
+    const greetingPatterns = [
+        "hi", "hello", "hey", "good morning", "good afternoon", "good evening"
+    ];
+    message = message.trim().toLowerCase();
+    for (let i = 0; i < greetingPatterns.length; i++) {
+        if (message === greetingPatterns[i] || message.indexOf(greetingPatterns[i] + " ") === 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function generateGreetingResponse() {
+    const greetings = [
+        "Hello! 👋",
+        "Hi there! 👋",
+        "Hey! 👋",
+        "Greetings! 👋"
+    ];
+
+    const timeBasedGreetings = {
+        morning: "Good morning! ☀️",
+        afternoon: "Good afternoon! 🌤️",
+        evening: "Good evening! 🌙"
+    };
+
+    const hour = new Date().getHours();
+    let timeGreeting;
+    if (hour >= 5 && hour < 12) {
+        timeGreeting = timeBasedGreetings.morning;
+    } else if (hour >= 12 && hour < 18) {
+        timeGreeting = timeBasedGreetings.afternoon;
+    } else {
+        timeGreeting = timeBasedGreetings.evening;
+    }
+
+    const casualGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    return timeGreeting + " " + casualGreeting + " How can I assist you with your coding today?";
+}
   
   function isRelevantMessage(message) {
+    if (isGreeting(message)) {
+        return true;
+    }
     const relevantKeywords = [
       'code', 'problem', 'solution', 'algorithm', 'error', 'bug', 'function',
       'programming', 'debug', 'help', 'explain', 'how', 'why', 'what',
       'complexity', 'time', 'space', 'approach', 'method', 'implement',
       'optimize', 'improve', 'fix', 'issue', 'test', 'case', 'example',
-      'hint', 'stuck', 'understand', 'logic', 'data', 'structure','solve'
+        'hint', 'stuck', 'understand', 'logic', 'data', 'structure', 'solve'
     ];
-
     const irrelevantPatterns = [
-      /^(hi|hello|hey)$/i,
-      /how are you/i,
-      /weather/i,
-      /sports/i,
-      /movies/i,
-      /music/i,
-      /\b(eat|food|drink)\b/i,
-      /\b(game|play)\b/i,
-      /\b(chat|talk)\b/i
+        "weather", "sports", "movies", "music", "eat", "food", "drink", "game", "play"
     ];
-
-    if (chatContext.messageHistory.length === 0 && /^(hi|hello|hey)$/i.test(message.trim())) {
+    message = message.toLowerCase();
+    for (let i = 0; i < irrelevantPatterns.length; i++) {
+        if (message.indexOf(irrelevantPatterns[i]) !== -1) {
+            return false;
+        }
+    }
+    for (let i = 0; i < relevantKeywords.length; i++) {
+        if (message.indexOf(relevantKeywords[i]) !== -1) {
       return true;
     }
-
-    if (irrelevantPatterns.some(pattern => pattern.test(message))) {
-      return false;
     }
-
-    const messageLower = message.toLowerCase();
-    return relevantKeywords.some(keyword => messageLower.includes(keyword));
+      return false;
   }
 
   function updateChatHistory(role, message, isRelevant = true) {
     if (isRelevant) {
       chatContext.messageHistory.push({
-        role,
+            role: role,
         content: message,
         timestamp: new Date().toISOString()
       });
@@ -792,19 +970,16 @@ How would you like to approach this problem? I can help you with:
 
   function formatChatHistoryForPrompt() {
     return chatContext.messageHistory
-      .map(msg => `${msg.role}: ${msg.content}`)
-      .join('\n\n');
+        .map(msg => msg.role + ": " + msg.content)
+        .join("\n\n");
   }
   
-  // Add this function near the top of your file, after chatContext initialization
   function detectProgrammingLanguage() {
     try {
-      // Find the language selector element
       const languageSelector = document.querySelector('.ant-select-selection-item');
       if (languageSelector) {
         const languageText = languageSelector.textContent.trim();
         
-        // Map common language displays to standardized names
         const languageMap = {
           'C++14': 'cpp',
           'C++17': 'cpp',
@@ -823,52 +998,54 @@ How would you like to approach this problem? I can help you with:
           'Rust': 'rust'
         };
 
-        // Try to find a match in our language map
-        for (const [key, value] of Object.entries(languageMap)) {
-          if (languageText.includes(key)) {
-            console.log('Detected programming language:', value);
-            return value;
-          }
+            for (let key in languageMap) {
+                if (languageText.indexOf(key) !== -1) {
+                    console.log('Detected programming language:', languageMap[key]);
+                    return languageMap[key];
+                }
+            }
         }
-      }
 
-      // Default to C++ if no language is detected
       console.log('No language detected, defaulting to cpp');
       return 'cpp';
     } catch (error) {
       console.error('Error detecting programming language:', error);
-      return 'cpp'; // Default to C++ in case of error
+        return 'cpp';
     }
-  }
-  
-  // Helper function to find elements by text content
-  function getElementByText(selector, text) {
-    return Array.from(document.querySelectorAll(selector))
-      .find(el => el.textContent.trim().toLowerCase().includes(text.toLowerCase()));
-  }
-  
-  // Helper function to determine problem type
-  function getProblemType(description) {
+}
+
+function getElementByText(selector, text) {
+    const elements = document.querySelectorAll(selector);
+    for (let i = 0; i < elements.length; i++) {
+        if (elements[i].textContent.trim().toLowerCase().indexOf(text.toLowerCase()) !== -1) {
+            return elements[i];
+        }
+    }
+    return null;
+}
+
+function getProblemType(description) {
     const types = {
-      'array': ['array', 'elements', 'sequence'],
-      'string': ['string', 'substring', 'palindrome'],
-      'graph': ['graph', 'tree', 'path'],
-      'dynamic programming': ['maximum', 'minimum', 'optimal'],
-      'greedy': ['smallest', 'largest', 'maximum possible']
+        'array': ['array', 'elements', 'sequence'],
+        'string': ['string', 'substring', 'palindrome'],
+        'graph': ['graph', 'tree', 'path'],
+        'dynamic programming': ['maximum', 'minimum', 'optimal'],
+        'greedy': ['smallest', 'largest', 'maximum possible']
     };
 
-    for (const [type, keywords] of Object.entries(types)) {
-      if (keywords.some(keyword => description.toLowerCase().includes(keyword))) {
-        return type.charAt(0).toUpperCase() + type.slice(1);
-      }
+    for (let type in types) {
+        let keywords = types[type];
+        for (let i = 0; i < keywords.length; i++) {
+            if (description.toLowerCase().indexOf(keywords[i]) !== -1) {
+                return type.charAt(0).toUpperCase() + type.slice(1);
+            }
+        }
     }
     return 'Algorithm';
-  }
+}
 
-  // Helper function to summarize requirements
-  function summarizeRequirements(description) {
-    const sentences = description.split('.');
-    return sentences.slice(0, 2).join('.') + '.';
-  }
-  
+function summarizeRequirements(description) {
+    let sentences = description.split(".");
+    return sentences.slice(0, 2).join(".") + ".";
+}
   
